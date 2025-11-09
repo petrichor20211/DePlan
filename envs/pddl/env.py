@@ -65,7 +65,7 @@ class PDDLEnv(Env):
         # Paths
         self.base_path = Path(__file__).parent
         self.domain_path = self.base_path / "domains" / self.domain_name
-        self.solver_path = Path("/mnt/g/personal/DePlan/support/downward-release-22.06.1")
+        self.solver_path = self.base_path / ".." / ".." / "support" / "downward-release-22.06.1"
         
         # Load domain files
         self._load_domain_files()

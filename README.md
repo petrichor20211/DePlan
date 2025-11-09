@@ -31,7 +31,31 @@ DePlan/
 pip install -r requirements.txt
 ```
 
-### 2. Configure LLM
+### 2. Setup Fast-Downward Solver
+
+DePlan requires the Fast-Downward planner to solve PDDL problems.
+
+**Download and Setup**:
+
+```bash
+# Download Fast-Downward (version 22.06.1 recommended)
+mkdir -p support && cd support
+wget https://github.com/aibasel/downward/releases/download/release-22.06.1/downward-release-22.06.1.tar.gz
+tar -xzf downward-release-22.06.1.tar.gz
+cd downward-release-22.06.1
+./build.py
+```
+
+**Expected Directory Structure**:
+```
+DePlan/
+└── support/
+    └── downward-release-22.06.1/
+        ├── fast-downward.py
+        ├── builds/
+        └── ...
+```
+### 3. Configure LLM
 
 Edit `configs/profiles.yaml` with your API credentials:
 
@@ -44,13 +68,13 @@ models:
     temperature: 0.0
 ```
 
-### 3. Run Single Task Test
+### 4. Run Single Task Test
 
 ```bash
 python scripts/test_single.py
 ```
 
-### 4. Run Batch Tasks
+### 5. Run Batch Tasks
 
 **Without context (llm_pddl)**:
 ```bash
