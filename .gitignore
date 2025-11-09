@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# OS
+Thumbs.db
+
+# Project specific
+*.pyc
+output/
+results/
+tmp/
+temp/
+*.tmp
+references/
+support/
