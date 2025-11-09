@@ -1,0 +1,5 @@
+openai==2.6.1
+rich==14.2.0
+pyyaml
+pydantic
+tqdm
