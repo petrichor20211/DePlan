@@ -5,8 +5,8 @@
 ```
 DePlan/
 ├── agents/
-│   └── llm_pddl/              # LLM PDDL planner agent
-│       ├── agent.py           # LLMPDDLAgent implementation
+│   └── deplan/                # DePlan agent
+│       ├── agent.py           # DePlanAgent implementation
 │       └── prompts/           # Prompt templates
 ├── envs/
 │   └── pddl/                  # PDDL environment
@@ -76,20 +76,28 @@ python scripts/test_single.py
 
 ### 5. Run Batch Tasks
 
-**Without context (llm_pddl)**:
+**Without context (direct PDDL generation)**:
 ```bash
-python run.py -a llm_pddl -e pddl -n 5 \
+python run.py -a deplan -e pddl -n 5 \
   --profile deepseek \
   --domain_name barman \
   --use_context false
 ```
 
-**With context (llm_ic_pddl)**:
+**With context (in-context learning)**:
+```bash
+python run.py -a deplan -e pddl -n 5 \
+  --profile deepseek \
+  --domain_name barman \
+  --use_context true
+```
+
+**Backward compatibility (use `llm_pddl` alias)**:
 ```bash
 python run.py -a llm_pddl -e pddl -n 5 \
   --profile deepseek \
   --domain_name barman \
-  --use_context true
+  --use_context false
 ```
 
 **Using config file**:
@@ -112,7 +120,7 @@ python run.py -C test_pddl.yaml
 - `domain_name`: PDDL domain name (e.g., "barman", "blocksworld")
 - `task_id`: Task ID (0-based index)
 
-### LLMPDDLAgent (Agent)
+### DePlanAgent (Agent)
 
 **Responsibilities**:
 - Convert natural language task descriptions to PDDL problem files
@@ -120,8 +128,12 @@ python run.py -C test_pddl.yaml
 - Manage LLM invocations and cost tracking
 
 **Parameters**:
-- `use_context`: Enable in-context learning (True=llm_ic_pddl, False=llm_pddl)
+- `use_context`: Enable in-context learning (with/without examples)
 - `profile`: LLM configuration name
+
+**Aliases**:
+- `deplan` (recommended)
+- `llm_pddl` (backward compatibility)
 
 ## Supported PDDL Domains
 
@@ -136,10 +148,10 @@ python run.py -C test_pddl.yaml
 
 ## Method Comparison
 
-| Method | Context | Prompt |
-|--------|---------|--------|
-| llm_pddl | No | Direct PDDL generation |
-| llm_ic_pddl | Yes | PDDL generation with examples |
+| Mode | Context | Description |
+|------|---------|-------------|
+| use_context=False | No | Direct PDDL generation from task description |
+| use_context=True | Yes | PDDL generation with in-context examples |
 
 ## Output
 
