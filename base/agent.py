@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Any, List
 
 class Agent(ABC):
     @abstractmethod
-    async def act(self, observations: List[str]) -> List[str]:
+    async def act(self, observations: List[Any]) -> List[str]:
         pass
 
     @abstractmethod

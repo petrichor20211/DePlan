@@ -1,7 +1,7 @@
-"""Simple test script for LLM PDDL planner."""
+"""Simple test script for DePlan agent."""
 
 import asyncio
-from agents.llm_pddl.agent import LLMPDDLAgent
+from agents.deplan.agent import DePlanAgent
 from envs.pddl.env import PDDLEnv
 
 
@@ -20,8 +20,8 @@ async def test_single_task():
     env = PDDLEnv(domain_name="barman")
     
     # Initialize agent
-    print("Initializing LLM PDDL agent...")
-    agent = LLMPDDLAgent(use_context=False)
+    print("Initializing DePlan agent...")
+    agent = DePlanAgent(use_context=False)
     
     # Reset with task
     print("Resetting environment with task 0...")

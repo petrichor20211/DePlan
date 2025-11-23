@@ -1,16 +1,17 @@
-"""LLM PDDL Planner Agent.
+"""DePlan Agent.
 
 Translates natural language task descriptions into PDDL problem files
 using LLM, then relies on environment to solve using classical planner.
 """
 
-from typing import Dict, List, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from base.agent import Agent
 from utils.llm import AsyncLLM
 
 
-class LLMPDDLAgent(Agent):
+class DePlanAgent(Agent):
     """Agent that uses LLM to generate PDDL problem files.
     
     Supports two modes:
@@ -34,6 +35,7 @@ class LLMPDDLAgent(Agent):
         # Domain info (set during reset)
         self.domain_nl: Optional[str] = None
         self.domain_pddl: Optional[str] = None
+        self.domain_name: Optional[str] = None  
         self.context: Optional[Tuple[str, str, str]] = None  # (nl, pddl, sol)
         
         # Statistics
@@ -55,6 +57,7 @@ class LLMPDDLAgent(Agent):
         if init_info:
             self.domain_nl = init_info.get("domain_nl", "")
             self.domain_pddl = init_info.get("domain_pddl", "")
+            self.domain_name = self._extract_domain_name(self.domain_pddl)
             self.context = init_info.get("context")
             
         # Reset stats
@@ -63,13 +66,13 @@ class LLMPDDLAgent(Agent):
         
         if self.logger:
             mode = "with context" if self.use_context else "without context"
-            self.logger.info(f"LLMPDDLAgent reset (mode: {mode}, profile: {profile})")
+            self.logger.info(f"DePlanAgent reset (mode: {mode}, profile: {profile})")
             
-    async def act(self, observations: List[str]) -> List[str]:
+    async def act(self, observations: List[Any]) -> List[str]:
         """Generate PDDL problem file from task description.
         
         Args:
-            observations: List with natural language task description
+            observations: List with natural language task description as first element
             
         Returns:
             List with generated PDDL problem file content
@@ -79,6 +82,7 @@ class LLMPDDLAgent(Agent):
                 self.logger.warning("Empty observations received")
             return [""]
             
+        # Extract task_nl from first observation (string)
         task_nl = observations[0]
         
         try:
@@ -120,12 +124,15 @@ class LLMPDDLAgent(Agent):
             Prompt string
         """
         prompt = (
-            f"{self.domain_nl}\n\n"
+            f"Here is the complete PDDL domain definition:\n\n"
+            f"{self.domain_pddl}\n\n"
+            f"Domain explanation: {self.domain_nl}\n\n"
             f"Now consider a planning problem. "
             f"The problem description is:\n{task_nl}\n\n"
             f"Provide me with the problem PDDL file that describes "
             f"the planning problem directly without further explanations. "
-            f"Keep the domain name consistent in the problem PDDL. "
+            f"You MUST use the exact domain name '{self.domain_name}' "
+            f"and the exact predicate names as defined in the domain PDDL above. "
             f"Only return the PDDL file. Do not return anything else."
         )
         return prompt
@@ -146,12 +153,16 @@ class LLMPDDLAgent(Agent):
         context_nl, context_pddl, context_sol = self.context
         
         prompt = (
+            f"Here is the complete PDDL domain definition:\n\n"
+            f"{self.domain_pddl}\n\n"
             f"I want you to solve planning problems. "
             f"An example planning problem is:\n{context_nl}\n\n"
             f"The problem PDDL file to this problem is:\n{context_pddl}\n\n"
             f"Now I have a new planning problem and its description is:\n{task_nl}\n\n"
             f"Provide me with the problem PDDL file that describes "
-            f"the new planning problem directly without further explanations? "
+            f"the new planning problem directly without further explanations. "
+            f"You MUST use the exact domain name '{self.domain_name}' "
+            f"and the exact predicate names as defined in the domain PDDL above. "
             f"Only return the PDDL file. Do not return anything else."
         )
         return prompt
@@ -182,6 +193,28 @@ class LLMPDDLAgent(Agent):
                     
         # Return as-is if no code block found
         return response.strip()
+    
+    def _extract_domain_name(self, domain_pddl: str) -> str:
+        """Extract domain name from PDDL domain file.
+        
+        Parses (define (domain name) ...) structure to extract domain name.
+        
+        Args:
+            domain_pddl: PDDL domain file content
+            
+        Returns:
+            Domain name string, or "domain" as fallback
+        """
+        if not domain_pddl:
+            return "domain"
+            
+        # Match (define (domain domain-name) ...)
+        match = re.search(r'\(define\s+\(domain\s+([^\)]+)\)', domain_pddl)
+        if match:
+            return match.group(1).strip()
+            
+        # Fallback
+        return "domain"
         
     def report(self) -> dict:
         """Generate report with agent statistics.

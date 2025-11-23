@@ -53,7 +53,7 @@ from utils.errors import StepLimitError
 # Allow short aliases like `-a human` and `-e alfworld`
 AGENT_ALIASES = {
     "recode": "agents.recode.agent.ReCodeAgent",
-    "llm_pddl": "agents.llm_pddl.agent.LLMPDDLAgent",
+    "deplan": "agents.deplan.agent.DePlanAgent"
 }
 
 ENV_ALIASES = {

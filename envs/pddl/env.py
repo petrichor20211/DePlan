@@ -85,6 +85,10 @@ class PDDLEnv(Env):
         self.plan_cost: float = 1e10
         self.planning_time: float = 0.0
         
+        # Solver output
+        self.last_stdout: str = ""
+        self.last_stderr: str = ""
+        
     def _load_domain_files(self):
         """Load domain PDDL and natural language description."""
         # Load domain.pddl
@@ -191,6 +195,27 @@ class PDDLEnv(Env):
             "task_id": task_id,
             "task_type": self.domain_name.upper(),
         }
+    
+    async def run(self, action: List[str]) -> List[str]:
+        """Execute planning actions and return [result, stdout, stderr].
+        
+        Args:
+            action: List of PDDL problem file content
+            
+        Returns:
+            List with three strings: [result, stdout, stderr]
+        """
+        if isinstance(action, str):
+            action = [action]
+        
+        if not action:
+            return []
+        
+        # Execute first action (PDDL env typically only uses one action)
+        result = await self._run(action[0])
+        
+        # Return as [result, stdout, stderr]
+        return [result, self.last_stdout, self.last_stderr]
         
     async def _run(self, action: str) -> str:
         """Execute one planning step.
@@ -199,7 +224,7 @@ class PDDLEnv(Env):
             action: Generated PDDL problem file content
             
         Returns:
-            Observation string (plan or error message)
+            Result string (plan or error message)
         """
         self._step_count += 1
         self.generated_pddl = action
@@ -226,6 +251,10 @@ class PDDLEnv(Env):
         sas_file = temp_dir / "output.sas"
         
         start_time = time.time()
+        
+        # Initialize stdout/stderr
+        stdout_text = ""
+        stderr_text = ""
         
         try:
             # Build fast-downward command
@@ -263,6 +292,10 @@ class PDDLEnv(Env):
             
             stdout_text = stdout.decode('utf-8', errors='replace')
             stderr_text = stderr.decode('utf-8', errors='replace')
+            
+            # Save to instance variables
+            self.last_stdout = stdout_text
+            self.last_stderr = stderr_text
             
             with open(stdout_file, 'w') as f:
                 f.write(stdout_text)
