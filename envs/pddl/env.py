@@ -4,42 +4,12 @@ This environment loads PDDL domains, manages planning tasks, calls fast-downward
 solver, and evaluates plan quality.
 """
 
-import asyncio
-import glob
-import os
-import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from base.environment import Env
-
-
-def postprocess(text: str) -> str:
-    """Remove leading/trailing whitespace from text."""
-    return text.strip()
-
-
-def get_plan_cost(output: str) -> float:
-    """Extract plan cost from fast-downward output.
-    
-    Args:
-        output: Last line of plan file containing cost info
-        
-    Returns:
-        Plan cost (default 1e5 if not found)
-    """
-    splitted = output.split()
-    counter = 0
-    found = False
-    cost = 1e5
-    for i, token in enumerate(splitted):
-        if token == "cost":
-            counter = i
-            found = True
-            break
-    if found:
-        cost = float(splitted[counter + 2])
-    return cost
+from utils.pddl_loader import DomainData, DomainLoader
+from utils.pddl_solver import FastDownwardSolver, PlanResult
 
 
 class PDDLEnv(Env):
@@ -58,21 +28,24 @@ class PDDLEnv(Env):
         """
         self.domain_name = domain_name.lower()
         self.logger = logger
+        
+        # State tracking
         self._step_count = 0
         self._done = False
         self._success = False
         
         # Paths
-        self.base_path = Path(__file__).parent
-        self.domain_path = self.base_path / "domains" / self.domain_name
-        self.solver_path = self.base_path / ".." / ".." / "support" / "downward-release-22.06.1"
+        base_path = Path(__file__).parent
+        domain_path = base_path / "domains" / self.domain_name
+        solver_path = base_path / ".." / ".." / "support" / "downward-release-22.06.1"
         
-        # Load domain files
-        self._load_domain_files()
+        # Load domain data
+        loader = DomainLoader(domain_path)
+        self.domain: DomainData = loader.load()
+        self.domain_path = domain_path
         
-        # Load tasks
-        self.tasks: List[Tuple[str, str]] = []
-        self._load_tasks()
+        # Initialize solver
+        self.solver = FastDownwardSolver(solver_path)
         
         # Current task state
         self.current_task_id: Optional[int] = None
@@ -80,74 +53,24 @@ class PDDLEnv(Env):
         self.current_task_pddl: Optional[str] = None
         
         # Planning results
-        self.generated_pddl: Optional[str] = None
-        self.plan: Optional[str] = None
-        self.plan_cost: float = 1e10
-        self.planning_time: float = 0.0
+        self.last_result: Optional[PlanResult] = None
         
-        # Solver output
-        self.last_stdout: str = ""
-        self.last_stderr: str = ""
+        self._log_init()
         
-    def _load_domain_files(self):
-        """Load domain PDDL and natural language description."""
-        # Load domain.pddl
-        domain_pddl_file = self.domain_path / "domain.pddl"
-        if not domain_pddl_file.exists():
-            error_msg = f"Domain PDDL not found: {domain_pddl_file}"
-            if self.logger:
-                self.logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-        with open(domain_pddl_file, 'r') as f:
-            self.domain_pddl = postprocess(f.read())
-            
-        # Load domain.nl (optional)
-        domain_nl_file = self.domain_path / "domain.nl"
-        if domain_nl_file.exists():
-            with open(domain_nl_file, 'r') as f:
-                self.domain_nl = postprocess(f.read())
-        else:
-            self.domain_nl = ""
-            
-        # Load context example
-        context_nl_file = self.domain_path / "p_example.nl"
-        context_pddl_file = self.domain_path / "p_example.pddl"
-        context_sol_file = self.domain_path / "p_example.sol"
-        
-        self.context = None
-        if all(f.exists() for f in [context_nl_file, context_pddl_file, context_sol_file]):
-            with open(context_nl_file, 'r') as f:
-                context_nl = postprocess(f.read())
-            with open(context_pddl_file, 'r') as f:
-                context_pddl = postprocess(f.read())
-            with open(context_sol_file, 'r') as f:
-                context_sol = postprocess(f.read())
-            self.context = (context_nl, context_pddl, context_sol)
-            
-    def _load_tasks(self):
-        """Load all planning tasks in the domain."""
-        nls = []
-        for fn in glob.glob(str(self.domain_path / "*.nl")):
-            fn_name = os.path.basename(fn)
-            # Exclude domain.nl and p_example.nl
-            if "domain" not in fn_name and "p_example" not in fn_name:
-                pddl_file = fn.replace(".nl", ".pddl")
-                if os.path.exists(pddl_file):
-                    nls.append(fn_name)
-        
-        # Sort tasks by name
-        sorted_nls = sorted(nls)
-        self.tasks = [(nl, nl.replace(".nl", ".pddl")) for nl in sorted_nls]
-        
+    def _log_init(self) -> None:
+        """Log initialization info."""
         if self.logger:
-            self.logger.info(f"Loaded {len(self.tasks)} tasks for domain '{self.domain_name}'")
-            
+            count = len(self.domain.task_files)
+            self.logger.info(
+                f"Loaded domain '{self.domain_name}' with {count} tasks"
+            )
+    
     def reset(self, running_config: dict, id: Optional[str] = None) -> dict:
         """Reset environment with a new task.
         
         Args:
-            running_config: Configuration dict with 'task_id' (int) or 'start_id' offset
-            id: Optional instance id for logging
+            running_config: Configuration dict (unused currently)
+            id: Optional task id (as string)
             
         Returns:
             Dict with observations, domain info, and context
@@ -155,44 +78,64 @@ class PDDLEnv(Env):
         self._step_count = 0
         self._done = False
         self._success = False
-        self.plan = None
-        self.plan_cost = 1e10
-        self.planning_time = 0.0
-        self.generated_pddl = None
+        self.last_result = None
         
         # Determine task id
-        task_id = running_config.get("task_id", 0)
-        if id is not None:
-            try:
-                task_id = int(id)
-            except (ValueError, TypeError):
-                pass
-                
-        if task_id >= len(self.tasks):
-            raise ValueError(f"Task ID {task_id} out of range (0-{len(self.tasks)-1})")
-            
-        self.current_task_id = task_id
-        nl_file, pddl_file = self.tasks[task_id]
+        task_id = self._parse_task_id(id)
+        self._validate_task_id(task_id)
         
         # Load task files
-        with open(self.domain_path / nl_file, 'r') as f:
-            self.current_task_nl = postprocess(f.read())
-        with open(self.domain_path / pddl_file, 'r') as f:
-            self.current_task_pddl = postprocess(f.read())
-            
+        self.current_task_id = task_id
+        self._load_current_task(task_id)
+        
         self.id = f"pddl-{self.domain_name}-t{task_id}"
         
         if self.logger:
-            self.logger.info(f"Reset PDDL env: domain={self.domain_name}, task={task_id} ({nl_file})")
-            
+            nl_file = self.domain.task_files[task_id][0]
+            self.logger.info(f"Reset: domain={self.domain_name}, task={task_id} ({nl_file})")
+        
+        return self._build_observation()
+    
+    def _parse_task_id(self, id: Optional[str]) -> int:
+        """Parse task id from string or return 0."""
+        if id is None:
+            return 0
+        try:
+            return int(id)
+        except (ValueError, TypeError):
+            return 0
+    
+    def _validate_task_id(self, task_id: int) -> None:
+        """Validate task id is in range."""
+        if task_id >= len(self.domain.task_files):
+            raise ValueError(
+                f"Task ID {task_id} out of range (0-{len(self.domain.task_files)-1})"
+            )
+    
+    def _load_current_task(self, task_id: int) -> None:
+        """Load task files into current state."""
+        nl_file, pddl_file = self.domain.task_files[task_id]
+        self.current_task_nl = (self.domain_path / nl_file).read_text().strip()
+        self.current_task_pddl = (self.domain_path / pddl_file).read_text().strip()
+    
+    def _build_observation(self) -> dict:
+        """Build observation dict for agent."""
+        context = None
+        if self.domain.context:
+            context = (
+                self.domain.context.nl,
+                self.domain.context.pddl,
+                self.domain.context.solution,
+            )
+        
         return {
             "observations": [self.current_task_nl],
             "env_name": "pddl",
             "domain_name": self.domain_name,
-            "domain_nl": self.domain_nl,
-            "domain_pddl": self.domain_pddl,
-            "context": self.context,
-            "task_id": task_id,
+            "domain_nl": self.domain.nl,
+            "domain_pddl": self.domain.pddl,
+            "context": context,
+            "task_id": self.current_task_id,
             "task_type": self.domain_name.upper(),
         }
     
@@ -212,11 +155,13 @@ class PDDLEnv(Env):
             return []
         
         # Execute first action (PDDL env typically only uses one action)
-        result = await self._run(action[0])
+        result_text = await self._run(action[0])
         
         # Return as [result, stdout, stderr]
-        return [result, self.last_stdout, self.last_stderr]
-        
+        if self.last_result:
+            return [result_text, self.last_result.stdout, self.last_result.stderr]
+        return [result_text, "", ""]
+    
     async def _run(self, action: str) -> str:
         """Execute one planning step.
         
@@ -227,146 +172,86 @@ class PDDLEnv(Env):
             Result string (plan or error message)
         """
         self._step_count += 1
-        self.generated_pddl = action
         
-        # Create temp directory for this run
-        if self.logger:
-            log_base = Path(self.logger.get_base_dir())
-        else:
-            log_base = Path("logs") / "temp"
-            
-        temp_dir = log_base / f"pddl_temp_{self.domain_name}_t{self.current_task_id}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        # Prepare working directory
+        work_dir = self._create_work_dir()
+        problem_file = work_dir / "problem.pddl"
+        problem_file.write_text(action)
         
-        # Write problem PDDL file
-        problem_file = temp_dir / "problem.pddl"
-        with open(problem_file, 'w') as f:
-            f.write(action)
-            
-        # Copy domain PDDL
         domain_file = self.domain_path / "domain.pddl"
         
-        # Call fast-downward
-        plan_file = temp_dir / "plan"
-        sas_file = temp_dir / "output.sas"
+        # Call solver
+        self._log_solving()
+        self.last_result = await self.solver.solve(domain_file, problem_file, work_dir)
         
-        start_time = time.time()
+        # Update state based on result
+        self._update_state_from_result(self.last_result)
         
-        # Initialize stdout/stderr
-        stdout_text = ""
-        stderr_text = ""
+        # Log and return
+        self._log_result(self.last_result)
+        return self._format_result_message(self.last_result)
+    
+    def _create_work_dir(self) -> Path:
+        """Create temporary working directory for solver."""
+        if self.logger:
+            base = Path(self.logger.get_base_dir())
+        else:
+            base = Path("logs") / "temp"
         
-        try:
-            # Build fast-downward command
-            fd_script = self.solver_path / "fast-downward.py"
-            if not fd_script.exists():
-                return f"ERROR: fast-downward not found at {fd_script}"
-                
-            cmd = [
-                "python",
-                str(fd_script),
-                "--alias", "seq-opt-fdss-1",
-                "--search-time-limit", "200",
-                "--plan-file", str(plan_file),
-                "--sas-file", str(sas_file),
-                str(domain_file),
-                str(problem_file),
-            ]
-            
-            if self.logger:
-                self.logger.info(f"Running fast-downward: {' '.join(cmd)}")
-                
-            # Run async subprocess
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+        work_dir = base / f"pddl_temp_{self.domain_name}_t{self.current_task_id}"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        return work_dir
+    
+    def _log_solving(self) -> None:
+        """Log solver invocation."""
+        if self.logger:
+            self.logger.info(
+                f"Solving: domain={self.domain_name}, task={self.current_task_id}"
             )
-            
-            stdout, stderr = await process.communicate()
-            self.planning_time = time.time() - start_time
-            
-            # Save solver logs
-            stdout_file = temp_dir / "solver_stdout.log"
-            stderr_file = temp_dir / "solver_stderr.log"
-            
-            stdout_text = stdout.decode('utf-8', errors='replace')
-            stderr_text = stderr.decode('utf-8', errors='replace')
-            
-            # Save to instance variables
-            self.last_stdout = stdout_text
-            self.last_stderr = stderr_text
-            
-            with open(stdout_file, 'w') as f:
-                f.write(stdout_text)
-            with open(stderr_file, 'w') as f:
-                f.write(stderr_text)
-            
-            if self.logger:
-                self.logger.info(f"Solver logs saved: {stdout_file}, {stderr_file}")
-                # Log key info from solver output
-                if stderr_text.strip():
-                    self.logger.warning(f"Solver stderr (first 500 chars):\n{stderr_text[:500]}")
-            
-            # Parse plan files
-            best_cost = 1e10
-            best_plan = None
-            
-            for plan_path in glob.glob(str(plan_file) + "*"):
-                with open(plan_path, 'r') as f:
-                    lines = f.readlines()
-                    if lines:
-                        cost = get_plan_cost(lines[-1])
-                        if cost < best_cost:
-                            best_cost = cost
-                            best_plan = "\n".join([line.strip() for line in lines[:-1]])
-                            
-            if best_plan:
-                self.plan = best_plan
-                self.plan_cost = best_cost
-                self._success = True
-                self._done = True
-                
-                if self.logger:
-                    self.logger.info(f"Plan found! Cost: {best_cost}, Time: {self.planning_time:.2f}s")
-                    
-                return f"SUCCESS: Plan found with cost {best_cost}\n{best_plan}"
-            else:
-                self._done = True
-                # Extract key error info from solver output
-                error_hints = []
-                if "unsolvable" in stdout_text.lower():
-                    error_hints.append("Problem appears to be UNSOLVABLE")
-                if "parse error" in stdout_text.lower() or "parse error" in stderr_text.lower():
-                    error_hints.append("PARSE ERROR detected")
-                if "time limit" in stdout_text.lower():
-                    error_hints.append("TIME LIMIT exceeded")
-                    
-                hint_text = " | ".join(error_hints) if error_hints else "Check solver logs for details"
-                error_msg = f"No solution found. Time: {self.planning_time:.2f}s | {hint_text}"
-                
-                if self.logger:
-                    self.logger.warning(error_msg)
-                    self.logger.info(f"Full solver output saved in {temp_dir}")
-                    
-                return f"ERROR: {error_msg}"
-                
-        except Exception as e:
-            self.planning_time = time.time() - start_time
-            self._done = True
-            error_msg = f"Planning failed: {e}"
-            if self.logger:
-                self.logger.error(error_msg)
-            return f"ERROR: {error_msg}"
-            
+    
+    def _update_state_from_result(self, result: PlanResult) -> None:
+        """Update environment state based on solver result."""
+        self._success = result.success
+        self._done = True
+    
+    def _log_result(self, result: PlanResult) -> None:
+        """Log solver result."""
+        if not self.logger:
+            return
+        
+        if result.success:
+            self.logger.info(
+                f"Plan found! Cost: {result.cost}, Time: {result.time_seconds:.2f}s"
+            )
+        else:
+            hints = " | ".join(result.error_hints) if result.error_hints else "Check logs"
+            self.logger.warning(
+                f"No solution. Time: {result.time_seconds:.2f}s | {hints}"
+            )
+    
+    @staticmethod
+    def _format_result_message(result: PlanResult) -> str:
+        """Format result as human-readable message."""
+        if result.success:
+            return f"SUCCESS: Plan found with cost {result.cost}\n{result.plan}"
+        
+        hints = " | ".join(result.error_hints) if result.error_hints else "Check solver logs"
+        return f"ERROR: No solution found. Time: {result.time_seconds:.2f}s | {hints}"
+    
     def report(self) -> dict:
         """Generate report dict with planning metrics."""
+        cost = 0.0
+        time_sec = 0.0
+        
+        if self.last_result:
+            cost = self.last_result.cost if self._success else 0.0
+            time_sec = self.last_result.time_seconds
+        
         return {
             "success": self._success,
             "steps": self._step_count,
-            "cost": self.plan_cost if self._success else 0.0,
-            "time": self.planning_time,
+            "cost": cost,
+            "time": time_sec,
             "task_type": self.domain_name.upper(),
             "task_id": self.current_task_id,
         }
-

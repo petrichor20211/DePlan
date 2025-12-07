@@ -4,11 +4,12 @@ Translates natural language task descriptions into PDDL problem files
 using LLM, then relies on environment to solve using classical planner.
 """
 
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from base.agent import Agent
 from utils.llm import AsyncLLM
+from utils.common import extract_domain_name, parse_pddl_from_response
+from agents.deplan.prompts import build_llm_pddl_prompt, build_llm_ic_pddl_prompt
 
 
 class DePlanAgent(Agent):
@@ -57,7 +58,7 @@ class DePlanAgent(Agent):
         if init_info:
             self.domain_nl = init_info.get("domain_nl", "")
             self.domain_pddl = init_info.get("domain_pddl", "")
-            self.domain_name = self._extract_domain_name(self.domain_pddl)
+            self.domain_name = extract_domain_name(self.domain_pddl)
             self.context = init_info.get("context")
             
         # Reset stats
@@ -82,18 +83,14 @@ class DePlanAgent(Agent):
                 self.logger.warning("Empty observations received")
             return [""]
             
-        # Extract task_nl from first observation (string)
         task_nl = observations[0]
         
         try:
-            # Build prompt
-            if self.use_context and self.context:
-                prompt = self._build_llm_ic_pddl_prompt(task_nl)
-            else:
-                prompt = self._build_llm_pddl_prompt(task_nl)
+            # Build prompt using appropriate strategy
+            prompt = self._build_prompt(task_nl)
                 
             if self.logger:
-                self.logger.info(f"Querying LLM for PDDL generation...")
+                self.logger.info("Querying LLM for PDDL generation...")
                 
             # Query LLM (AsyncLLM uses __call__)
             response, cost = await self.llm_client(prompt)
@@ -101,7 +98,7 @@ class DePlanAgent(Agent):
             self.total_cost += cost
                 
             # Parse PDDL from response
-            pddl_problem = self._parse_pddl(response)
+            pddl_problem = parse_pddl_from_response(response)
             
             if self.logger:
                 self.logger.info(f"Generated PDDL ({len(pddl_problem)} chars, cost: ${cost:.4f})")
@@ -111,11 +108,10 @@ class DePlanAgent(Agent):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error generating PDDL: {e}")
-            # Return empty PDDL on error
             return ["(define (problem error) (:domain error) (:objects) (:init) (:goal (and)))"]
         
-    def _build_llm_pddl_prompt(self, task_nl: str) -> str:
-        """Build prompt for PDDL generation without context.
+    def _build_prompt(self, task_nl: str) -> str:
+        """Build prompt based on agent mode.
         
         Args:
             task_nl: Natural language task description
@@ -123,98 +119,20 @@ class DePlanAgent(Agent):
         Returns:
             Prompt string
         """
-        prompt = (
-            f"Here is the complete PDDL domain definition:\n\n"
-            f"{self.domain_pddl}\n\n"
-            f"Domain explanation: {self.domain_nl}\n\n"
-            f"Now consider a planning problem. "
-            f"The problem description is:\n{task_nl}\n\n"
-            f"Provide me with the problem PDDL file that describes "
-            f"the planning problem directly without further explanations. "
-            f"You MUST use the exact domain name '{self.domain_name}' "
-            f"and the exact predicate names as defined in the domain PDDL above. "
-            f"Only return the PDDL file. Do not return anything else."
-        )
-        return prompt
-        
-    def _build_llm_ic_pddl_prompt(self, task_nl: str) -> str:
-        """Build prompt for PDDL generation with in-context example.
-        
-        Args:
-            task_nl: Natural language task description
-            
-        Returns:
-            Prompt string
-        """
-        if not self.context:
-            # Fallback to no-context version
-            return self._build_llm_pddl_prompt(task_nl)
-            
-        context_nl, context_pddl, context_sol = self.context
-        
-        prompt = (
-            f"Here is the complete PDDL domain definition:\n\n"
-            f"{self.domain_pddl}\n\n"
-            f"I want you to solve planning problems. "
-            f"An example planning problem is:\n{context_nl}\n\n"
-            f"The problem PDDL file to this problem is:\n{context_pddl}\n\n"
-            f"Now I have a new planning problem and its description is:\n{task_nl}\n\n"
-            f"Provide me with the problem PDDL file that describes "
-            f"the new planning problem directly without further explanations. "
-            f"You MUST use the exact domain name '{self.domain_name}' "
-            f"and the exact predicate names as defined in the domain PDDL above. "
-            f"Only return the PDDL file. Do not return anything else."
-        )
-        return prompt
-        
-    def _parse_pddl(self, response: str) -> str:
-        """Parse PDDL content from LLM response.
-        
-        Handles cases where LLM wraps PDDL in markdown code blocks.
-        
-        Args:
-            response: Raw LLM response
-            
-        Returns:
-            Extracted PDDL string
-        """
-        # Try to extract from markdown code block
-        if "```" in response:
-            # Find content between triple backticks
-            parts = response.split("```")
-            for i, part in enumerate(parts):
-                # Look for PDDL content (skip language tags like "pddl")
-                if i % 2 == 1:  # Odd indices are inside code blocks
-                    # Remove language identifier if present
-                    lines = part.strip().split('\n')
-                    if lines and lines[0].lower() in ['pddl', 'lisp', 'scheme']:
-                        return '\n'.join(lines[1:])
-                    return part.strip()
-                    
-        # Return as-is if no code block found
-        return response.strip()
-    
-    def _extract_domain_name(self, domain_pddl: str) -> str:
-        """Extract domain name from PDDL domain file.
-        
-        Parses (define (domain name) ...) structure to extract domain name.
-        
-        Args:
-            domain_pddl: PDDL domain file content
-            
-        Returns:
-            Domain name string, or "domain" as fallback
-        """
-        if not domain_pddl:
-            return "domain"
-            
-        # Match (define (domain domain-name) ...)
-        match = re.search(r'\(define\s+\(domain\s+([^\)]+)\)', domain_pddl)
-        if match:
-            return match.group(1).strip()
-            
-        # Fallback
-        return "domain"
+        if self.use_context:
+            return build_llm_ic_pddl_prompt(
+                task_nl=task_nl,
+                domain_pddl=self.domain_pddl,
+                domain_name=self.domain_name,
+                context=self.context
+            )
+        else:
+            return build_llm_pddl_prompt(
+                task_nl=task_nl,
+                domain_pddl=self.domain_pddl,
+                domain_nl=self.domain_nl,
+                domain_name=self.domain_name
+            )
         
     def report(self) -> dict:
         """Generate report with agent statistics.
@@ -226,4 +144,3 @@ class DePlanAgent(Agent):
             "llm_queries": self.num_queries,
             "llm_cost": self.total_cost,
         }
-

@@ -48,3 +48,53 @@ def parse_xml_tag(response: str, xml_tag: str) -> str:
     pattern = rf"<{xml_tag}>(.*?)</{xml_tag}>"
     match = re.search(pattern, response, re.DOTALL)
     return match.group(1).strip() if match else ""
+
+
+def extract_domain_name(domain_pddl: str) -> str:
+    """Extract domain name from PDDL domain file.
+    
+    Parses (define (domain name) ...) structure.
+    
+    Args:
+        domain_pddl: PDDL domain file content
+        
+    Returns:
+        Domain name string, or "domain" as fallback
+    """
+    if not domain_pddl:
+        return "domain"
+        
+    # Match (define (domain domain-name) ...)
+    match = re.search(r'\(define\s+\(domain\s+([^\)]+)\)', domain_pddl)
+    if match:
+        return match.group(1).strip()
+        
+    return "domain"
+
+
+def parse_pddl_from_response(response: str) -> str:
+    """Parse PDDL content from LLM response.
+    
+    Handles cases where LLM wraps PDDL in markdown code blocks.
+    
+    Args:
+        response: Raw LLM response
+        
+    Returns:
+        Extracted PDDL string
+    """
+    # Try to extract from markdown code block
+    if "```" in response:
+        # Find content between triple backticks
+        parts = response.split("```")
+        for i, part in enumerate(parts):
+            # Look for PDDL content (skip language tags like "pddl")
+            if i % 2 == 1:  # Odd indices are inside code blocks
+                # Remove language identifier if present
+                lines = part.strip().split('\n')
+                if lines and lines[0].lower() in ['pddl', 'lisp', 'scheme']:
+                    return '\n'.join(lines[1:])
+                return part.strip()
+                
+    # Return as-is if no code block found
+    return response.strip()
