@@ -1,5 +1,9 @@
 # DePlan: LLM-based PDDL Planning
 
+## Architecture
+
+![DePlan Pipeline](assets/images/pipeline.png)
+
 ## Project Structure
 
 ```
