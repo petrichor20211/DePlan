@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from base.agent import Agent
 from utils.llm import AsyncLLM
 from utils.common import extract_domain_name, parse_pddl_from_response
-from agents.deplan.prompts import build_llm_pddl_prompt, build_llm_ic_pddl_prompt
+from agents.deplan.prompts import pddl_nl_desc_to_pddl_prompt, prepare_incontext_example
 
 
 class DePlanAgent(Agent):
@@ -111,28 +111,36 @@ class DePlanAgent(Agent):
             return ["(define (problem error) (:domain error) (:objects) (:init) (:goal (and)))"]
         
     def _build_prompt(self, task_nl: str) -> str:
-        """Build prompt based on agent mode.
-        
+        """Build prompt for NL to PDDL conversion.
+
+        Builds the base prompt and optionally appends an in-context example
+        if use_context is True and context is available.
+
         Args:
             task_nl: Natural language task description
-            
+
         Returns:
-            Prompt string
+            Complete prompt string
         """
-        if self.use_context:
-            return build_llm_ic_pddl_prompt(
-                task_nl=task_nl,
-                domain_pddl=self.domain_pddl,
-                domain_name=self.domain_name,
-                context=self.context
+        # Build the base prompt for NL to PDDL conversion
+        prompt = pddl_nl_desc_to_pddl_prompt(
+            task_nl=task_nl,
+            domain_pddl=self.domain_pddl,
+            domain_nl=self.domain_nl,
+            domain_name=self.domain_name
+        )
+
+        # Append in-context example if enabled and available
+        if self.use_context and self.context:
+            context_nl, context_pddl, context_sol = self.context
+            example = prepare_incontext_example(
+                context_nl=context_nl,
+                context_pddl=context_pddl,
+                context_sol=context_sol
             )
-        else:
-            return build_llm_pddl_prompt(
-                task_nl=task_nl,
-                domain_pddl=self.domain_pddl,
-                domain_nl=self.domain_nl,
-                domain_name=self.domain_name
-            )
+            prompt = f"{prompt}\n\n{example}"
+
+        return prompt
         
     def report(self) -> dict:
         """Generate report with agent statistics.
