@@ -55,5 +55,7 @@ temp/
 references/
 support/
 configs/profiles.yaml
-envs/pddl/domains
-note/
+envs/pddl+p/domains
+docs/
+meeting/
+outputs/

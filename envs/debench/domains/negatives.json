@@ -1,0 +1,34 @@
+{
+  "by_bucket": {
+    "Household chores and environment": {
+      "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+      "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+      "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+    },
+    "Medication and health management": {
+      "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+      "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+      "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+    },
+    "Safety and emergency response": {
+      "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+      "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+      "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+    },
+    "Daily Needs Fulfillment": {
+      "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+      "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+      "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+    },
+    "Personal care and hygiene": {
+      "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+      "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+      "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+    }
+  },
+  "default": {
+    "unrelated_pddl": "(define (problem travel-day-plan)\n  (:domain travel-itinerary)\n  (:objects\n    traveler1 - person\n    ticket1 - ticket\n    gateA - gate\n    hotel1 - lodging\n  )\n  (:init\n    (at-person traveler1 city-center)\n    (has-ticket traveler1 ticket1)\n    (gate-for ticket1 gateA)\n    (hotel-available hotel1)\n  )\n  (:goal (and (checked-in traveler1) (at-hotel traveler1 hotel1)))\n)",
+    "unrelated_plan": "(go-to traveler1 city-center gateA)\n(check-in traveler1 ticket1 gateA)\n(board traveler1 ticket1 gateA)\n(transfer traveler1 airport hotel1)\n",
+    "unrelated_demand_context": "Demand: Please check me in for my flight and make sure I reach the hotel tonight.\nContext: The traveler is downtown with a confirmed ticket, the gate is at the airport, and a hotel room is available across town."
+  }
+}
